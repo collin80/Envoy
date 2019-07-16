@@ -22,6 +22,33 @@ Envoy::Envoy(WiFiClient *ptr)
 void Envoy::begin(char *password)
 {   
     strncpy(installerPassword, password, 18);
+ 
+    if (!MDNS.begin("esp32")) { //you do need to call begin and it does need a name. No .local here either!
+        Serial.println("Error setting up MDNS responder!");
+    }
+    for (int i = 0; i < 4; i++) 
+    {
+        envoyIP = MDNS.queryHost(envoyName, 1000); //wait up to 1 second for a reply
+        if (envoyIP > 0) break; //no need to keep trying if it worked.
+        Serial.println("Failed to get IP of Envoy!");
+    }
+    Serial.print("IP Address of Envoy: ");
+    Serial.println(envoyIP.toString());
+    
+    serverString = "http://" + envoyIP.toString();
+    //serverString = "http://www.kkmfg.com/jack"; //for testing
+
+    xTaskCreate(&task_EnvoyAutoUpdate, "ENVOY_UPDATE", 3072, this, 10, &autoUpdateTask);
+    vTaskSuspend(autoUpdateTask); //by default it should be off
+
+    //call all three immediately to populate all the variables
+    update();
+}
+
+void Envoy::begin(char *password,char *device)
+{   
+    strncpy(installerPassword, password, 18);
+    if(device)strncpy(installerPassword, device, 18);
 
     if (!MDNS.begin("esp32")) { //you do need to call begin and it does need a name. No .local here either!
         Serial.println("Error setting up MDNS responder!");
@@ -45,10 +72,7 @@ void Envoy::begin(char *password)
     update();
 }
 
-void Envoy::setDebugging(bool state)
-{
-    debug = state;  
-}
+
 
 void Envoy::update()
 {
@@ -95,9 +119,9 @@ void Envoy::getInventory()
             payload = http.getString();
              
           }
-        else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+        //else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
       } 
-      else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+     // else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
       http.end();
       
       deserializeJson(doc, payload);
@@ -106,8 +130,8 @@ void Envoy::getInventory()
       int i;
       int devType;
       numInverters = 0;
-      TotalPower = 0;
-      TotalMaxPower = 0;
+      InvTotalPower = 0;
+      InvTotalMaxPower = 0;
           
       for (i = 0; i < 200; i++) 
       {
@@ -118,8 +142,8 @@ void Envoy::getInventory()
               serialNumber[i] = obj[i]["serialNumber"].as<String>();
               Watts[i] = obj[i]["lastReportWatts"];
               MaxWatts[i] = obj[i]["maxReportWatts"];
-              TotalPower += Watts[i];
-              TotalMaxPower += MaxWatts[i];
+              InvTotalPower += Watts[i];
+              InvTotalMaxPower += MaxWatts[i];
           }
           else break;
       }
@@ -130,10 +154,10 @@ void Envoy::getInventory()
         Serial.println(i);
         numInverters = i;
 
-        Serial.print("\nTotal Power:");
-        Serial.print(TotalPower);
-        Serial.print("   Total Peak Power:");
-        Serial.println(TotalMaxPower);
+        Serial.print("\nTotaled microInverter Power:");
+        Serial.print(InvTotalPower);
+        Serial.print("   Totaled microInverter Peak Power:");
+        Serial.println(InvTotalMaxPower);
           
         for (int j = 0; j < numInverters; j++)
         {
@@ -145,6 +169,7 @@ void Envoy::getInventory()
             Serial.print(MaxWatts[j]);
         }
       }
+  client->flush();
 }//End getEnvoyInventory
 
 void Envoy::getMeterStream()
@@ -174,9 +199,9 @@ void Envoy::getMeterStream()
           {
             payload = http.getString(); 
           }
-        else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+       // else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
       } 
-      else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      //else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
       http.end();
       
       deserializeJson(doc, &payload.c_str()[5]);
@@ -189,8 +214,8 @@ void Envoy::getMeterStream()
               Apower = obj["production"]["ph-a"]["p"];    
               Avoltage = obj["production"]["ph-a"]["v"];
               Acurrent = obj["production"]["ph-a"]["i"];
-              Apf = obj["production"]["ph-a"]["pf"];
-              Afreq = obj["production"]["ph-a"]["f"];
+              pf = obj["production"]["ph-a"]["pf"];
+              freq = obj["production"]["ph-a"]["f"];
               if (debug) 
               {
                   Serial.print("\nPhase A - ");
@@ -201,9 +226,9 @@ void Envoy::getMeterStream()
                   Serial.print("   Current: ");
                   Serial.print(Acurrent);  
                   Serial.print("  Power Factor: ");
-                  Serial.print(Apf);  
+                  Serial.print(pf);  
                   Serial.print("   Frequency: ");
-                  Serial.println(Afreq);
+                  Serial.println(freq);
               }
           }
           if (obj["production"].containsKey("ph-b"))
@@ -215,7 +240,7 @@ void Envoy::getMeterStream()
               Bfreq = obj["production"]["ph-b"]["f"];
               if (debug)
               {
-                  Serial.print("\nPhase B - ");
+                  Serial.print("Phase B - ");
                   Serial.print("Power: ");
                   Serial.print(Apower);
                   Serial.print("   Voltage: ");
@@ -223,23 +248,25 @@ void Envoy::getMeterStream()
                   Serial.print("   Current: ");
                   Serial.print(Acurrent);  
                   Serial.print("  Power Factor: ");
-                  Serial.print(Apf);  
+                  Serial.print(pf);  
                   Serial.print("   Frequency: ");
-                  Serial.println(Afreq);
+                  Serial.println(freq);
               }
           }
+          Power=Apower+Bpower;
+          
           if (debug)
           {
-              Serial.print("  Power Produced:");
+              Serial.print("\n  Power Produced:");
               Serial.print(Apower+Bpower);
               Serial.print("  Total Voltage:");
               Serial.print(Avoltage+Bvoltage);
               Serial.print("  Current:");
               Serial.print((Acurrent+Bcurrent)/2);
               Serial.print("  PowerFactor:");
-              Serial.print(Apf);
+              Serial.print(pf);
               Serial.print("  Frequency:");
-              Serial.print(Afreq);
+              Serial.print(freq);
               Serial.println();
           }
       }
@@ -250,6 +277,8 @@ void Envoy::getMeterStream()
           CBpower = obj["total-consumption"]["ph-b"]["p"];
           CApower *= -1;
           CBpower *= -1;
+          Consumption=CApower+CBpower;
+          
           if (debug)
           {
               Serial.print("  Power Consumed:");
@@ -259,6 +288,8 @@ void Envoy::getMeterStream()
               Serial.println();                      
           }
       }
+      NetPower=Power+Consumption;
+     client->flush();
 } 
 
 //http://envoy.local/production.json
@@ -271,7 +302,7 @@ void Envoy::getProduction()
     String payload;
     DynamicJsonDocument doc(8192); //probably a bit large but this is dynamic and will be automatically freed at the end of the function call
 
-    if (debug) Serial.print("\nhttp://envoy.local/production.json");               
+    if (debug) Serial.print("\nhttp://envoy.local/production.json\n\n");               
     http.begin(*client, serverString + String(uri));
     http.collectHeaders(keys, 1);
     int httpCode = http.GET(); //First GET
@@ -280,7 +311,7 @@ void Envoy::getProduction()
         payload = http.getString(); 
     //    Serial.println(&payload.c_str()[0]);
     }
-    else Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+    //else Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
     http.end();
     
     deserializeJson(doc, payload);
@@ -374,7 +405,7 @@ void Envoy::getProduction()
             Serial.print(MWhLifetime+ConMWhLifetime);                   
         }
     }             
-   
+   client->flush();
 } //END production.json
 
 void Envoy::printInventory()
@@ -499,4 +530,3 @@ String Envoy::getDigestAuth(String& authReq, const String& username, const Strin
 
   return authorization;
 }
-
