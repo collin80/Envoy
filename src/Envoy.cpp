@@ -20,35 +20,14 @@ Envoy::Envoy(WiFiClient *ptr)
 }
 
 void Envoy::begin(char *password)
-{   
-    strncpy(installerPassword, password, 18);
- 
-    if (!MDNS.begin("esp32")) { //you do need to call begin and it does need a name. No .local here either!
-        Serial.println("Error setting up MDNS responder!");
-    }
-    for (int i = 0; i < 4; i++) 
-    {
-        envoyIP = MDNS.queryHost(envoyName, 1000); //wait up to 1 second for a reply
-        if (envoyIP > 0) break; //no need to keep trying if it worked.
-        Serial.println("Failed to get IP of Envoy!");
-    }
-    Serial.print("IP Address of Envoy: ");
-    Serial.println(envoyIP.toString());
-    
-    serverString = "http://" + envoyIP.toString();
-    //serverString = "http://www.kkmfg.com/jack"; //for testing
-
-    xTaskCreate(&task_EnvoyAutoUpdate, "ENVOY_UPDATE", 3072, this, 10, &autoUpdateTask);
-    vTaskSuspend(autoUpdateTask); //by default it should be off
-
-    //call all three immediately to populate all the variables
-    update();
+{
+    begin(password, NULL);   
 }
 
-void Envoy::begin(char *password,char *device)
+void Envoy::begin(char *password, char *device)
 {   
     strncpy(installerPassword, password, 18);
-    if(device)strncpy(installerPassword, device, 18);
+    if (device) strncpy(envoyName, device, 18);
 
     if (!MDNS.begin("esp32")) { //you do need to call begin and it does need a name. No .local here either!
         Serial.println("Error setting up MDNS responder!");
@@ -63,7 +42,6 @@ void Envoy::begin(char *password,char *device)
     Serial.println(envoyIP.toString());
     
     serverString = "http://" + envoyIP.toString();
-    //serverString = "http://www.kkmfg.com/jack"; //for testing
 
     xTaskCreate(&task_EnvoyAutoUpdate, "ENVOY_UPDATE", 3072, this, 10, &autoUpdateTask);
     vTaskSuspend(autoUpdateTask); //by default it should be off
