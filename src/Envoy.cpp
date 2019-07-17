@@ -24,7 +24,7 @@ void Envoy::begin(char *password)
     begin(password, NULL);   
 }
 
-void Envoy::begin(char *password, char *device)
+void Envoy::begin(char *password,char *device)
 {   
     strncpy(installerPassword, password, 18);
     if (device) strncpy(envoyName, device, 18);
@@ -87,19 +87,32 @@ void Envoy::getInventory()
       {
         String authReq = http.header("WWW-Authenticate");
         String authorization = getDigestAuth(authReq, String(username), String(installerPassword), String(uri), 1);
-        http.end();  //Two step process. Get authorization, then reopen and send authorization
+        http.end();  //Two step process. Get authorization, then reopen and send authorization 
+   
+        delay(200);
+   
         http.begin(*client, serverString + String(uri));
         http.addHeader("Authorization", authorization);
-        
+        //delay(50);
         int httpCode = http.GET(); //Second GET Actually gets the resulting payload
         if (httpCode > 0) 
           {
             payload = http.getString();
              
           }
-        //else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+        else 
+          {
+            Serial.printf("[HTTP] Get Inventory Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+            http.end();
+            return;  
+          }
       } 
-     // else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      else 
+        {
+          Serial.printf("[HTTP] Get Inventory First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+            http.end();
+            return;    
+        }
       http.end();
       
       deserializeJson(doc, payload);
@@ -141,9 +154,9 @@ void Envoy::getInventory()
         {
             Serial.print("\nSerial Number: ");
             Serial.print(serialNumber[j]);
-            Serial.print("   Output:");
+            Serial.print("   Now:");
             Serial.print(Watts[j]);
-            Serial.print("w   Peak Output:");
+            Serial.print("w   Peak:");
             Serial.print(MaxWatts[j]);
         }
       }
@@ -169,6 +182,9 @@ void Envoy::getMeterStream()
         String authReq = http.header("WWW-Authenticate");
         String authorization = getDigestAuth(authReq, String(username), String(installerPassword), String(uri), 1);
         http.end();  //Two step process. Get authorization, then reopen and send authorization
+       
+        delay(200);
+        
         http.begin(*client, serverString + String(uri));
         http.addHeader("Authorization", authorization);
         
@@ -177,9 +193,19 @@ void Envoy::getMeterStream()
           {
             payload = http.getString(); 
           }
-       // else Serial.printf("[HTTP] Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+          else 
+            {
+              Serial.printf("[HTTP] Second getMeterStream GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
+              http.end();
+              return;
+            }
       } 
-      //else Serial.printf("[HTTP] First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      else 
+        {
+          Serial.printf("[HTTP] First getMeterStream GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+            http.end();
+            return;    
+        }
       http.end();
       
       deserializeJson(doc, &payload.c_str()[5]);
@@ -220,15 +246,15 @@ void Envoy::getMeterStream()
               {
                   Serial.print("Phase B - ");
                   Serial.print("Power: ");
-                  Serial.print(Apower);
+                  Serial.print(Bpower);
                   Serial.print("   Voltage: ");
-                  Serial.print(Avoltage);
+                  Serial.print(Bvoltage);
                   Serial.print("   Current: ");
-                  Serial.print(Acurrent);  
+                  Serial.print(Bcurrent);  
                   Serial.print("  Power Factor: ");
-                  Serial.print(pf);  
+                  Serial.print(Bpf);  
                   Serial.print("   Frequency: ");
-                  Serial.println(freq);
+                  Serial.println(Bfreq);
               }
           }
           Power=Apower+Bpower;
@@ -393,12 +419,13 @@ void Envoy::printInventory()
         Serial.println();
         Serial.print(j + 1);
         Serial.print(" - ");
-        Serial.print("Serial Number: ");
+        Serial.print("Serial:");
         Serial.print(serialNumber[j]);
-        Serial.print("   Output:");
+        Serial.print("...Now:");
         Serial.print(Watts[j]);
-        Serial.print("w   Peak Output:");
+        Serial.print(" Watts...Peak:");
         Serial.print(MaxWatts[j]);
+        Serial.print(" Watts");
     }
 }
 
