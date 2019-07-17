@@ -155,6 +155,7 @@ public:
     void setAuthorization(const char * auth);
     void setConnectTimeout(int32_t connectTimeout);
     void setTimeout(uint16_t timeout);
+    void setAllowChunking(bool mode);
 
     void useHTTP10(bool usehttp10 = true);
 
@@ -236,6 +237,7 @@ protected:
     int _size = -1;
     bool _canReuse = false;
     transferEncoding_t _transferEncoding = HTTPC_TE_IDENTITY;
+    bool _allowChunking = true;
 };
 
 

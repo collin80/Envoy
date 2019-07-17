@@ -735,6 +735,11 @@ WiFiClient* HTTPClient::getStreamPtr(void)
     return nullptr;
 }
 
+void HTTPClient::setAllowChunking(bool mode)
+{
+    _allowChunking = mode;
+}
+
 /**
  * write all  message body / payload to Stream
  * @param stream Stream *
@@ -764,7 +769,7 @@ int HTTPClient::writeToStream(Stream * stream)
         }
     } else if(_transferEncoding == HTTPC_TE_CHUNKED) {
         int size = 0;
-        //while(1) {
+        do {
             if(!connected()) {
                 return returnError(HTTPC_ERROR_CONNECTION_LOST);
             }
@@ -800,7 +805,7 @@ int HTTPClient::writeToStream(Stream * stream)
                 if(ret != _size) {
                     return returnError(HTTPC_ERROR_STREAM_WRITE);
                 }
-                //break;
+                break;
             }
 
             // read trailing \r\n at the end of the chunk
@@ -811,7 +816,7 @@ int HTTPClient::writeToStream(Stream * stream)
             }
 
             delay(0);
-        //}
+        } while (_allowChunking);
     } else {
         return returnError(HTTPC_ERROR_ENCODING);
     }

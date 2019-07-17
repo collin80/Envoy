@@ -78,6 +78,8 @@ void Envoy::getInventory()
   DynamicJsonDocument doc(25000); //a little bigger for safety. The ESP32 has a good amount of RAM anyway
   char * rendered;
   String payload;  
+
+  http.setAllowChunking(false);
    
    if (debug) Serial.print("\nhttp://envoy.local/api/v1/production/inverters\n");
    http.begin(*client, serverString + String(uri));
@@ -104,6 +106,7 @@ void Envoy::getInventory()
           {
             Serial.printf("[HTTP] Get Inventory Second GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
             http.end();
+            http.setAllowChunking(true);
             return;  
           }
       } 
@@ -111,6 +114,7 @@ void Envoy::getInventory()
         {
           Serial.printf("[HTTP] Get Inventory First GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
             http.end();
+            http.setAllowChunking(true);
             return;    
         }
       http.end();
@@ -161,6 +165,7 @@ void Envoy::getInventory()
         }
       }
   client->flush();
+  http.setAllowChunking(true);
 }//End getEnvoyInventory
 
 void Envoy::getMeterStream()
@@ -171,6 +176,8 @@ void Envoy::getMeterStream()
    const char *keys[] = {"WWW-Authenticate"};
    String payload;
    DynamicJsonDocument doc(8192); //probably a bit large but this is dynamic and will be automatically freed at the end of the function call
+
+   http.setAllowChunking(false);
     
    if (debug) Serial.print("\nhttp://envoy.local/stream/meter\n");
       
@@ -197,6 +204,7 @@ void Envoy::getMeterStream()
             {
               Serial.printf("[HTTP] Second getMeterStream GET... failed, error: %s\n", http.errorToString(httpCode).c_str());           
               http.end();
+              http.setAllowChunking(true);
               return;
             }
       } 
@@ -204,6 +212,7 @@ void Envoy::getMeterStream()
         {
           Serial.printf("[HTTP] First getMeterStream GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
             http.end();
+            http.setAllowChunking(true);
             return;    
         }
       http.end();
@@ -305,6 +314,8 @@ void Envoy::getProduction()
     const char *keys[] = {"WWW-Authenticate"};
     String payload;
     DynamicJsonDocument doc(8192); //probably a bit large but this is dynamic and will be automatically freed at the end of the function call
+
+    http.setAllowChunking(false);
 
     if (debug) Serial.print("\nhttp://envoy.local/production.json\n\n");               
     http.begin(*client, serverString + String(uri));
@@ -410,6 +421,7 @@ void Envoy::getProduction()
         }
     }             
    client->flush();
+   http.setAllowChunking(true);
 } //END production.json
 
 void Envoy::printInventory()
